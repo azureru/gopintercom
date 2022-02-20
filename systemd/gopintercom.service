@@ -1,0 +1,15 @@
+[Unit]
+Description=Gopintercom
+Documentation=
+After=network-online.target
+
+[Service]
+Environment="TELEGRAM_APITOKEN="
+LimitNOFILE=65536
+ExecStart=/opt/gopintercom/gopintercom
+WorkingDirectory=/opt/gopintercom/
+KillMode=control-group
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
