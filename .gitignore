@@ -1,2 +1,5 @@
 gopintercom
 vendor
+*.ogg
+*.mp3
+*.wav

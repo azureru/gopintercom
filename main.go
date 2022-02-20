@@ -3,7 +3,12 @@ package main
 import (
     "fmt"
     tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+    "io"
+    "net/http"
     "os"
+    "os/exec"
+    "strconv"
+    "strings"
     "sync"
 )
 
@@ -12,6 +17,13 @@ func main() {
     if err != nil {
         fmt.Println("Fill TELEGRAM_APITOKEN with telegram token")
         panic(err)
+    }
+    chatIds := os.Getenv("TELEGRAM_CHATID")
+    ids := strings.Split(chatIds, ",")
+    var idnt []int64
+    for _, id := range ids {
+        idi, _ := strconv.ParseInt(id, 10, 64)
+        idnt = append(idnt, idi)
     }
 
     bot.Debug = true
@@ -38,33 +50,68 @@ func main() {
             continue
         }
 
-        if update.Message.IsCommand() {
-            // is a command
-           cmd := update.Message.Command()
-           if cmd == "/record" {
-                // TODO: to record a sound
-           }
+        if chatIds != "" {
+            // chatIds ENV config is defined - ignore users not listed in the list
+            found := false
+            for i := 0; i < len(idnt) ; i++ {
+                if idnt[i] == update.Message.Chat.ID {
+                    found = true
+                }
+            }
+            if !found {
+                continue
+            }
+        }
 
-           continue
+        var msg tgbotapi.MessageConfig
+        msg = tgbotapi.NewMessage(update.Message.Chat.ID, "")
+
+        // specific command handler
+        if update.Message.IsCommand() {
+           cmd := update.Message.Command()
+           fmt.Println("Receive command " + cmd)
+           if cmd == "record" {
+               // reply that we are attempting to record
+               msg.Text = "Recording..."
+               msg.ReplyToMessageID = update.Message.MessageID
+           } else if cmd == "myid" {
+               // return current chatid
+               msg.Text = fmt.Sprintf("Your chat.ID is %d", update.Message.Chat.ID)
+               msg.ReplyToMessageID = update.Message.MessageID
+           }
         }
 
         if update.Message.Audio != nil {
-            //update.Message.Audio.FileID
-            
+            url, err := bot.GetFileDirectURL(update.Message.Audio.FileID)
+            if err != nil {
+                fmt.Println("Error on getting Audio file" + update.Message.Audio.FileID)
+            }
+            // download the file and save to temp - then play it
+            msg.Text = "Audio received " + update.Message.Audio.FileID +" " + url
+            if err := DownloadFile(url, "./audio.ogg"); err != nil {
+                fmt.Println("Failed to Download" + url, err.Error())
+            }
+            // spawn process to play
+            if err := Spawn("ogg123", []string{"./audio.ogg"}); err != nil {
+                fmt.Println("Failed to play ", err.Error())
+            }
+        }
+        if update.Message.Voice != nil {
+            url, err := bot.GetFileDirectURL(update.Message.Voice.FileID)
+            if err != nil {
+                fmt.Println("Error on getting Voice file" + update.Message.Voice.FileID)
+            }
+            // download the file and save to temp - then play it
+            msg.Text = "Voice received " + update.Message.Voice.FileID +" " + url
+            if err := DownloadFile(url, "./voice.ogg"); err != nil {
+                fmt.Println("Failed to Download" + url, err.Error())
+            }
+            // spawn process to play
+            if err := Spawn("ogg123", []string{"./voice.ogg"}); err != nil {
+                fmt.Println("Failed to play ", err.Error())
+            }
         }
 
-
-        // Now that we know we've gotten a new message, we can construct a
-        // reply! We'll take the Chat ID and Text from the incoming message
-        // and use it to create a new message.
-        msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-        // We'll also say that this message is a reply to the previous message.
-        // For any other specifications than Chat ID or Text, you'll need to
-        // set fields on the `MessageConfig`.
-        msg.ReplyToMessageID = update.Message.MessageID
-
-        // Okay, we're sending our message off! We don't care about the message
-        // we just sent, so we'll discard it.
         if _, err := bot.Send(msg); err != nil {
             // Note that panics are a bad way to handle errors. Telegram can
             // have service outages or network errors, you should retry sending
@@ -73,7 +120,36 @@ func main() {
         }
     }
 
+    // infinite wait until terminated
     wg := sync.WaitGroup{}
     wg.Add(1)
     wg.Wait()
+}
+
+// DownloadFile will download a url to a local file.
+func DownloadFile(url string, targetPath string) error {
+
+	// Get the data
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Create the file
+	out, err := os.Create(targetPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+// Spawn - simply spawn a process without waiting
+func Spawn(executable string, params []string) error {
+    cmd := exec.Command(executable, params...)
+    return cmd.Run()
 }
