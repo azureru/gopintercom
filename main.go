@@ -157,7 +157,8 @@ func Spawn(executable string, params []string) error {
 
 func PlayAudio(file string) error {
  return cmdchain.Builder().
-        Join("opusdec", file, "-").
-        Join("aplay", "-q","-f","dat").
-        Finalize().Run()
+        Join("opusdec", "--force-wav", "--quiet", file, "-").
+        Join("aplay", "-q").
+        Finalize().
+        Run()
 }
