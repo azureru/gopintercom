@@ -3,6 +3,7 @@ package main
 import (
     "fmt"
     tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+    cmdchain "github.com/rainu/go-command-chain"
     "io"
     "net/http"
     "os"
@@ -92,7 +93,7 @@ func main() {
                 fmt.Println("Failed to Download" + url, err.Error())
             }
             // spawn process to play
-            if err := Spawn("ogg123", []string{"./audio.ogg"}); err != nil {
+            if err := PlayAudio("./audio.ogg"); err != nil {
                 fmt.Println("Failed to play ", err.Error())
             }
         }
@@ -107,7 +108,7 @@ func main() {
                 fmt.Println("Failed to Download" + url, err.Error())
             }
             // spawn process to play
-            if err := Spawn("ogg123", []string{"./voice.ogg"}); err != nil {
+            if err := PlayAudio("./voice.ogg"); err != nil {
                 fmt.Println("Failed to play ", err.Error())
             }
         }
@@ -152,4 +153,11 @@ func DownloadFile(url string, targetPath string) error {
 func Spawn(executable string, params []string) error {
     cmd := exec.Command(executable, params...)
     return cmd.Run()
+}
+
+func PlayAudio(file string) error {
+ return cmdchain.Builder().
+        Join("opusdec", file, "-").
+        Join("aplay", "-q","-f","dat").
+        Finalize().Run()
 }
