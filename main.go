@@ -83,7 +83,7 @@ func main() {
                if err := Spawn("arecord", []string{"-d",args,"record.mp3"}); err != nil {
                    fmt.Println("Failed to record", err.Error())
                }
-               audio := tgbotapi.NewAudio(msg.ChatID, tgbotapi.FilePath("./record.mp3"))
+               audio := tgbotapi.NewInputMediaAudio(tgbotapi.FilePath("record.mp3"))
                mg := tgbotapi.NewMediaGroup(msg.ChatID, []interface{}{
                    audio,
                })
@@ -130,7 +130,7 @@ func main() {
             // just panic here - let systemd restart whole service
             panic(err)
         }
-        fmt.Println(msg.Text)
+        fmt.Println(">", msg.Text)
     }
 
     // infinite wait until terminated
@@ -163,6 +163,7 @@ func DownloadFile(url string, targetPath string) error {
 
 // Spawn - simply spawn a process and wait
 func Spawn(executable string, params []string) error {
+    fmt.Println("#", executable, params)
     cmd := exec.Command(executable, params...)
     return cmd.Run()
 }
