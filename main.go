@@ -80,10 +80,10 @@ func main() {
                if args == "" {
                    args = "5"
                }
-               if err := Spawn("arecord", []string{"arecord","-d",args,"record.wav"}); err != nil {
+               if err := Spawn("arecord", []string{"-d",args,"record.mp3"}); err != nil {
                    fmt.Println("Failed to record", err.Error())
                }
-               audio := tgbotapi.NewAudio(msg.ChatID, tgbotapi.FilePath("./record.wav"))
+               audio := tgbotapi.NewAudio(msg.ChatID, tgbotapi.FilePath("./record.mp3"))
                mg := tgbotapi.NewMediaGroup(msg.ChatID, []interface{}{
                    audio,
                })
