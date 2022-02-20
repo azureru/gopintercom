@@ -26,8 +26,9 @@ func main() {
         idi, _ := strconv.ParseInt(id, 10, 64)
         idnt = append(idnt, idi)
     }
-
-    bot.Debug = true
+    if os.Getenv("VERBOSE") != ""  {
+        bot.Debug = true
+    }
 
     // Create a new UpdateConfig struct with an offset of 0. Offsets are used
     // to make sure Telegram knows we've handled previous values and we don't
@@ -44,15 +45,15 @@ func main() {
 
     // Let's go through each update that we're getting from Telegram.
     for update := range updates {
-        // Telegram can send many types of updates depending on what your Bot
+        // Telegram can send many types of up dates depending on what your Bot
         // is up to. We only want to look at messages for now, so we can
         // discard any other updates.
         if update.Message == nil {
             continue
         }
 
+        // chatIds ENV config is defined - ignore users not listed in the list
         if chatIds != "" {
-            // chatIds ENV config is defined - ignore users not listed in the list
             found := false
             for i := 0; i < len(idnt) ; i++ {
                 if idnt[i] == update.Message.Chat.ID {
@@ -66,6 +67,7 @@ func main() {
 
         var msg tgbotapi.MessageConfig
         msg = tgbotapi.NewMessage(update.Message.Chat.ID, "")
+        msg.ReplyToMessageID = update.Message.MessageID
 
         // specific command handler
         if update.Message.IsCommand() {
@@ -74,51 +76,61 @@ func main() {
            if cmd == "record" {
                // reply that we are attempting to record
                msg.Text = "Recording..."
-               msg.ReplyToMessageID = update.Message.MessageID
+               args := update.Message.CommandArguments()
+               if args == "" {
+                   args = "5"
+               }
+               if err := Spawn("arecord", []string{"arecord","-d",args,"record.wav"}); err != nil {
+                   fmt.Println("Failed to record", err.Error())
+               }
+               audio := tgbotapi.NewAudio(msg.ChatID, tgbotapi.FilePath("./record.wav"))
+               mg := tgbotapi.NewMediaGroup(msg.ChatID, []interface{}{
+                   audio,
+               })
+               if _, err := bot.SendMediaGroup(mg); err != nil {
+                   fmt.Println("Failed to send media-group", err.Error())
+               }
            } else if cmd == "myid" {
                // return current chatid
                msg.Text = fmt.Sprintf("Your chat.ID is %d", update.Message.Chat.ID)
-               msg.ReplyToMessageID = update.Message.MessageID
            }
-        }
-
-        if update.Message.Audio != nil {
+        } else if update.Message.Audio != nil {
             url, err := bot.GetFileDirectURL(update.Message.Audio.FileID)
             if err != nil {
                 fmt.Println("Error on getting Audio file" + update.Message.Audio.FileID)
             }
             // download the file and save to temp - then play it
-            msg.Text = "Audio received " + update.Message.Audio.FileID +" " + url
+            msg.Text = "Played"
             if err := DownloadFile(url, "./audio.ogg"); err != nil {
-                fmt.Println("Failed to Download" + url, err.Error())
+                msg.Text = "Failed to Download" + url +":" + err.Error()
             }
             // spawn process to play
             if err := PlayAudio("./audio.ogg"); err != nil {
-                fmt.Println("Failed to play ", err.Error())
+                msg.Text = "Failed to play " + ":" + err.Error()
             }
-        }
-        if update.Message.Voice != nil {
+        } else if update.Message.Voice != nil {
             url, err := bot.GetFileDirectURL(update.Message.Voice.FileID)
             if err != nil {
                 fmt.Println("Error on getting Voice file" + update.Message.Voice.FileID)
             }
             // download the file and save to temp - then play it
-            msg.Text = "Voice received " + update.Message.Voice.FileID +" " + url
+            msg.Text = "Played"
             if err := DownloadFile(url, "./voice.ogg"); err != nil {
-                fmt.Println("Failed to Download" + url, err.Error())
+                msg.Text = "Failed to Download" + url +":" + err.Error()
             }
             // spawn process to play
             if err := PlayAudio("./voice.ogg"); err != nil {
-                fmt.Println("Failed to play ", err.Error())
+                msg.Text = "Failed to play " + ":" + err.Error()
             }
+        } else {
+            continue
         }
 
         if _, err := bot.Send(msg); err != nil {
-            // Note that panics are a bad way to handle errors. Telegram can
-            // have service outages or network errors, you should retry sending
-            // messages or more gracefully handle failures.
+            // just panic here - let systemd restart whole service
             panic(err)
         }
+        fmt.Println(msg.Text)
     }
 
     // infinite wait until terminated
@@ -149,7 +161,7 @@ func DownloadFile(url string, targetPath string) error {
 	return err
 }
 
-// Spawn - simply spawn a process without waiting
+// Spawn - simply spawn a process and wait
 func Spawn(executable string, params []string) error {
     cmd := exec.Command(executable, params...)
     return cmd.Run()
